@@ -1,0 +1,110 @@
+import requests
+import sqlite3
+import time
+
+# OpenWeatherMap API Key
+API_KEY = "06719eed23e945bc38e64fdfa5eea4aa"
+
+# SQLite database setup
+conn = sqlite3.connect('weather_app.db')
+cursor = conn.cursor()
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS favorite_cities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        city TEXT UNIQUE NOT NULL
+    )
+''')
+conn.commit()
+
+def get_weather_by_city(city):
+    base_url = "http://api.openweathermap.org/data/2.5/weather"
+    params = {
+        'q': city,
+        'appid': API_KEY,
+        'units': 'metric'  # Change to 'imperial' for Fahrenheit
+    }
+
+    try:
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
+        weather_data = response.json()
+        return weather_data
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching weather data: {e}")
+        return None
+
+def display_weather(weather_data):
+    if weather_data:
+        print(f"Weather in {weather_data['name']}, {weather_data['sys']['country']}:")
+        print(f"Temperature: {weather_data['main']['temp']}°C")
+        print(f"Description: {weather_data['weather'][0]['description']}")
+        print(f"Humidity: {weather_data['main']['humidity']}%")
+        print(f"Wind Speed: {weather_data['wind']['speed']} m/s")
+    else:
+        print("Weather data not available.")
+
+def add_favorite_city(city):
+    try:
+        cursor.execute("INSERT INTO favorite_cities (city) VALUES (?)", (city,))
+        conn.commit()
+        print(f"{city} added to favorites.")
+    except sqlite3.IntegrityError:
+        print(f"{city} is already in favorites.")
+
+def list_favorite_cities():
+    cursor.execute("SELECT * FROM favorite_cities")
+    favorite_cities = cursor.fetchall()
+    if favorite_cities:
+        print("Favorite Cities:")
+        for city in favorite_cities:
+            print(f"{city[0]}. {city[1]}")
+    else:
+        print("No favorite cities yet.")
+
+def remove_favorite_city(city_id):
+    try:
+        cursor.execute("DELETE FROM favorite_cities WHERE id=?", (city_id,))
+        conn.commit()
+        print(f"City removed from favorites.")
+    except sqlite3.Error:
+        print(f"Error removing city from favorites.")
+
+def auto_refresh():
+    while True:
+        city = input("Enter city name for weather check: ")
+        weather_data = get_weather_by_city(city)
+        display_weather(weather_data)
+        time.sleep(30)  # Auto-refresh every 30 seconds
+
+if __name__ == "__main__":
+    while True:
+        print("\nOptions:")
+        print("1. Check weather by city")
+        print("2. Add city to favorites")
+        print("3. List favorite cities")
+        print("4. Remove city from favorites")
+        print("5. Auto-refresh weather")
+        print("6. Exit")
+
+        choice = input("Enter your choice (1-6): ")
+
+        if choice == '1':
+            city = input("Enter city name: ")
+            weather_data = get_weather_by_city(city)
+            display_weather(weather_data)
+        elif choice == '2':
+            city = input("Enter city name to add to favorites: ")
+            add_favorite_city(city)
+        elif choice == '3':
+            list_favorite_cities()
+        elif choice == '4':
+            city_id = input("Enter the ID of the city to remove from favorites: ")
+            remove_favorite_city(city_id)
+        elif choice == '5':
+            auto_refresh()
+        elif choice == '6':
+            print("Exiting the application.")
+            conn.close()
+            break
+        else:
+            print("Invalid choice. Please enter a number between 1 and 6.")
